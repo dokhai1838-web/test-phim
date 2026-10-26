@@ -39,9 +39,10 @@ class AppError(Exception):
 
 
 class ProviderError(AppError):
-    def __init__(self, message, model_unavailable=False):
+    def __init__(self, message, model_unavailable=False, upstream_status=None):
         super().__init__(message, 502)
         self.model_unavailable = model_unavailable
+        self.upstream_status = upstream_status
 
 
 class GeneratedText(str):
@@ -53,13 +54,24 @@ class GeneratedText(str):
 
 
 def api(url, *, method='POST', data=None, headers=None):
+    # Retry only read-only requests. Never resend generation or video uploads.
+    for attempt in range(3):
+        try:
+            return api_once(url, method=method, data=data, headers=headers)
+        except ProviderError as error:
+            if method != 'GET' or error.upstream_status not in {502, 503, 504} or attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
+
+
+def api_once(url, *, method='POST', data=None, headers=None):
     headers = dict(headers or {})
     if isinstance(data, dict):
         data = json.dumps(data).encode()
         headers['Content-Type'] = 'application/json'
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urllib.request.urlopen(request, timeout=15 if method == 'GET' else 180) as response:
             raw = response.read()
             return (json.loads(raw) if raw else {}), response.headers
     except urllib.error.HTTPError as exc:
@@ -82,7 +94,7 @@ def api(url, *, method='POST', data=None, headers=None):
         if model_missing:
             field = 'GEMINI_MODEL' if gemini else 'OPENAI_MODEL'
             raise ProviderError(f'{provider}: mô hình đã cấu hình không còn khả dụng hoặc tài khoản chưa có quyền. '
-                                f'Kiểm tra {field} trong Render → Environment.', True) from None
+                                f'Kiểm tra {field} trong Render → Environment.', True, exc.code) from None
         if exc.code == 404:
             if gemini and ('/files/' in path or ':generateContent' in path):
                 text = 'Gemini: không tìm thấy tệp video. Hãy tải lại video và phân tích lại.'
@@ -90,11 +102,15 @@ def api(url, *, method='POST', data=None, headers=None):
                 text = 'Gemini: phiên tải video không còn hợp lệ. Hãy thử tải lại video.'
             else:
                 text = f'{provider}: không tìm thấy tài nguyên API được yêu cầu (HTTP 404).'
-            raise ProviderError(text) from None
+            raise ProviderError(text, upstream_status=exc.code) from None
         messages = {401: 'Khóa API không hợp lệ.', 403: 'API chưa được cấp quyền hoặc bị chặn mạng.',
                     413: 'Nhà cung cấp từ chối kích thước video.',
-                    429: 'Hết hạn mức hoặc đang vượt giới hạn API. Kiểm tra thanh toán và thử lại.'}
-        raise ProviderError(provider + ': ' + messages.get(exc.code, f'API trả lỗi HTTP {exc.code}.')) from None
+                    429: 'Hết hạn mức hoặc đang vượt giới hạn API. Kiểm tra thanh toán và thử lại.',
+                    502: 'Dịch vụ đang lỗi tạm thời (HTTP 502). Thử lại sau ít phút.',
+                    503: 'Dịch vụ hiện không sẵn sàng (HTTP 503). Thử lại sau ít phút.',
+                    504: 'Dịch vụ phản hồi quá chậm (HTTP 504). Thử lại sau ít phút.'}
+        raise ProviderError(provider + ': ' + messages.get(exc.code, f'API trả lỗi HTTP {exc.code}.'),
+                            upstream_status=exc.code) from None
     except (urllib.error.URLError, TimeoutError, OSError):
         raise AppError('Không kết nối được API hoặc yêu cầu đã hết thời gian chờ.', 502) from None
 
@@ -131,6 +147,7 @@ def generate(provider, payload, headers):
     except ProviderError as original:
         if not original.model_unavailable:
             raise
+        selecting = True
         try:
             if provider == 'gemini':
                 catalog, _ = api('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', method='GET', headers=headers)
@@ -149,8 +166,18 @@ def generate(provider, payload, headers):
             alternative = next((name for name in candidates if name != configured), None)
             if alternative is None:
                 raise AppError('Tài khoản chưa liệt kê mô hình thay thế phù hợp.')
+            selecting = False
             return call(alternative), alternative
         except AppError as fallback_error:
+            if isinstance(fallback_error, ProviderError) and fallback_error.upstream_status in {502, 503, 504}:
+                label = 'Gemini' if provider == 'gemini' else 'OpenAI'
+                operation = 'đọc danh sách mô hình thay thế' if selecting else 'tạo nội dung bằng mô hình thay thế'
+                raise ProviderError(
+                    f'{label}: mô hình đã cấu hình bị từ chối. Khi {operation}, '
+                    f'nhà cung cấp trả HTTP {fallback_error.upstream_status}. '
+                    'Chưa hoàn tất việc chuyển mô hình; hãy thử lại sau ít phút. '
+                    'Lỗi này không xác nhận khóa API hoặc thanh toán có vấn đề.',
+                    upstream_status=fallback_error.upstream_status) from None
             raise ProviderError(f'{original} Không thể tự chọn mô hình thay thế. {fallback_error}') from None
 
 

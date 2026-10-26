@@ -227,6 +227,54 @@ class IntegrationTests(unittest.TestCase):
 
 
 class ModelRecoveryTests(unittest.TestCase):
+    @patch('server.time.sleep')
+    @patch('server.api_once')
+    def test_gemini_catalog_503_recovers_without_reupload_or_duplicate_generation(self, api_once, sleep):
+        api_once.side_effect = [
+            server.ProviderError('Gemini: retired model', True, 404),
+            server.ProviderError('Gemini: unavailable', upstream_status=503),
+            server.ProviderError('Gemini: unavailable', upstream_status=503),
+            ({'models': [{'name': 'models/gemini-3-flash-preview', 'supportedGenerationMethods': ['generateContent']}]}, {}),
+            ({'candidates': []}, {}),
+        ]
+        _, actual = server.generate('gemini', {'contents': []}, {'x-goog-api-key': 'test-key'})
+        self.assertEqual(actual, 'gemini-3-flash-preview')
+        self.assertEqual([call.kwargs['method'] for call in api_once.call_args_list], ['POST', 'GET', 'GET', 'GET', 'POST'])
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+
+    @patch('server.time.sleep')
+    @patch('server.api_once')
+    def test_persistent_catalog_503_reports_service_problem_and_stops(self, api_once, sleep):
+        api_once.side_effect = [server.ProviderError('Gemini: retired model', True, 404)] + [
+            server.ProviderError('Gemini: unavailable', upstream_status=503) for _ in range(3)]
+        with self.assertRaises(server.ProviderError) as caught:
+            server.generate('gemini', {}, {})
+        self.assertEqual(caught.exception.upstream_status, 503)
+        self.assertIn('HTTP 503', str(caught.exception))
+        self.assertIn('đọc danh sách', str(caught.exception))
+        self.assertNotIn('Kiểm tra GEMINI_MODEL', str(caught.exception))
+        self.assertEqual(api_once.call_count, 4)
+
+    @patch('server.time.sleep')
+    @patch('server.api_once')
+    def test_generation_503_is_never_automatically_retried(self, api_once, sleep):
+        api_once.side_effect = server.ProviderError('Gemini: unavailable', upstream_status=503)
+        with self.assertRaises(server.ProviderError):
+            server.generate('gemini', {}, {})
+        self.assertEqual(api_once.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch('server.time.sleep')
+    @patch('server.api_once')
+    def test_quota_and_auth_errors_are_not_retried(self, api_once, sleep):
+        for status in [401, 403, 404, 429]:
+            api_once.reset_mock()
+            api_once.side_effect = server.ProviderError('Provider error', upstream_status=status)
+            with self.assertRaises(server.ProviderError):
+                server.api('https://generativelanguage.googleapis.com/v1beta/models', method='GET')
+            self.assertEqual(api_once.call_count, 1)
+        sleep.assert_not_called()
+
     @patch('server.api')
     def test_gemini_recovery_excludes_specialist_models_and_reuses_payload(self, api):
         payload = {'contents': [{'parts': [{'text': 'Analyze video'}, {'file_data': {'file_uri': 'video-uri'}}]}]}
