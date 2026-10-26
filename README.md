@@ -42,7 +42,7 @@ Hai ô hướng dẫn độc lập cho phép tùy chỉnh từng bước:
 - **Hướng dẫn Gemini:** quy trình phân tích video, ví dụ tập trung vào hook, chép lời thoại, lập bảng phân cảnh hoặc phân tích âm thanh. Gửi kèm video chỉ tới Gemini. Sửa ô này rồi bấm phân tích lại để áp dụng; bản sơ lược hiện tại không tự thay đổi.
 - **Hướng dẫn ChatGPT:** yêu cầu viết lại bản sơ lược, ví dụ chỉ xuất một prompt hoàn chỉnh, chia cảnh 5 giây hoặc đổi phong cách kể chuyện. Gửi tới OpenAI cùng bản sơ lược, định hướng, mô hình đích và ngôn ngữ.
 
-Mỗi ô tối đa 10.000 ký tự, có nội dung gợi ý sửa được; để trống sẽ dùng hướng dẫn mặc định. Hướng dẫn không được lưu sau khi tải lại trang. Không điền khóa API vào các ô nội dung.
+Mỗi ô hướng dẫn Gemini và ChatGPT tối đa 80.000 ký tự, có nội dung gợi ý sửa được; để trống sẽ dùng hướng dẫn mặc định. Bản sơ lược tối đa 60.000 ký tự, định hướng ý tưởng tối đa 10.000 ký tự. Hướng dẫn không được lưu sau khi tải lại trang. Không điền khóa API vào các ô nội dung.
 
 Nút “Thử với dữ liệu mẫu” dùng nội dung cố định, không gọi API. Nút tạo prompt vẫn gọi ChatGPT thật, kể cả khi đang dùng bản sơ lược mẫu. Trạng thái API trên giao diện chỉ biểu thị đã có khóa, không xác nhận khóa hợp lệ.
 

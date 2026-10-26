@@ -88,8 +88,8 @@ function refresh() {
   $('step1').classList.toggle('done', !!file);
   $('step2').classList.toggle('done', !!$('brief').value.trim());
   $('step3').classList.toggle('done', !!$('result').textContent);
-  $('gemini-count').textContent = `${$('gemini-instructions').value.length.toLocaleString('vi-VN')} / 10.000`;
-  $('chatgpt-count').textContent = `${$('chatgpt-instructions').value.length.toLocaleString('vi-VN')} / 10.000`;
+  $('gemini-count').textContent = `${$('gemini-instructions').value.length.toLocaleString('vi-VN')} / ${$('gemini-instructions').maxLength.toLocaleString('vi-VN')}`;
+  $('chatgpt-count').textContent = `${$('chatgpt-instructions').value.length.toLocaleString('vi-VN')} / ${$('chatgpt-instructions').maxLength.toLocaleString('vi-VN')}`;
   $('analyze-hint').textContent = busy && currentStep === 1 ? 'Gemini đang xử lý. Bạn có thể chờ tại đây.' : file ? 'Video đã sẵn sàng. Kiểm tra hướng dẫn rồi bấm phân tích.' : 'Chọn một video để bắt đầu phân tích.';
   $('rewrite-hint').textContent = busy && currentStep === 2 ? 'ChatGPT đang viết prompt theo yêu cầu của bạn.' : $('brief').value.trim() ? 'Bản sơ lược đã sẵn sàng. Bạn có thể tạo prompt.' : 'Thêm bản sơ lược để tạo prompt.';
 }

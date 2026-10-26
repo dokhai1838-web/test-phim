@@ -36,7 +36,7 @@
       </section>
       <section class="panel instructions-panel"><div class="panel-heading"><div><span class="provider-label gemini"><span>✦</span> GEMINI</span><h2>Bạn muốn phân tích điều gì?</h2></div><span class="tag">Tùy chỉnh</span></div><p class="muted">Mô tả quy trình hoặc chỉnh sửa hướng dẫn gợi ý bên dưới.</p>
         <div class="field-heading"><label for="gemini-instructions">Hướng dẫn phân tích</label><button class="text-button reset-instructions" data-field="gemini-instructions">Khôi phục mẫu</button></div>
-        <textarea id="gemini-instructions" class="instruction-editor" rows="9" maxlength="10000" aria-describedby="gemini-help" placeholder="Ví dụ: Chép lời thoại và phân tích hook trong 3 giây đầu…">Phân tích video bằng tiếng Việt theo quy trình:
+        <textarea id="gemini-instructions" class="instruction-editor" rows="9" maxlength="80000" aria-describedby="gemini-help" placeholder="Ví dụ: Chép lời thoại và phân tích hook trong 3 giây đầu…">Phân tích video bằng tiếng Việt theo quy trình:
 1. Tóm tắt nội dung, mục tiêu và khán giả.
 2. Phân tích hook trong 3 giây đầu.
 3. Lập bảng từng cảnh: mốc thời gian, hình ảnh, góc máy, âm thanh, lời thoại và chữ hiển thị.
@@ -57,7 +57,7 @@
       <section class="panel instructions-panel"><div class="panel-heading"><div><span class="provider-label chatgpt"><span>✳</span> CHATGPT</span><h2>Định hình prompt mới</h2></div></div><p class="muted">Chọn đích đến và cách bạn muốn viết lại nội dung.</p>
         <div class="options"><div><label for="target">Mô hình đích</label><select id="target"><option>Veo</option><option>Sora</option><option>Runway</option><option>Kling</option><option>Midjourney</option><option>Tổng quát</option></select></div><div><label for="language">Ngôn ngữ prompt</label><select id="language"><option value="English">Tiếng Anh</option><option value="Tiếng Việt">Tiếng Việt</option></select></div></div>
         <div class="field-heading"><label for="chatgpt-instructions">Hướng dẫn viết lại</label><button class="text-button reset-instructions" data-field="chatgpt-instructions">Khôi phục mẫu</button></div>
-        <textarea id="chatgpt-instructions" class="instruction-editor" rows="9" maxlength="10000" aria-describedby="chatgpt-help" placeholder="Ví dụ: Chỉ xuất một prompt bằng tiếng Anh, mô tả rõ từng cảnh…">Dựa trên bản sơ lược và định hướng, tạo ý tưởng mới cho mô hình đích đã chọn.
+        <textarea id="chatgpt-instructions" class="instruction-editor" rows="9" maxlength="80000" aria-describedby="chatgpt-help" placeholder="Ví dụ: Chỉ xuất một prompt bằng tiếng Anh, mô tả rõ từng cảnh…">Dựa trên bản sơ lược và định hướng, tạo ý tưởng mới cho mô hình đích đã chọn.
 1. Viết concept ngắn gọn, không sao chép thương hiệu hoặc lời thoại đặc trưng.
 2. Viết master prompt có thể sao chép ngay.
 3. Tách prompt từng cảnh, kèm thời lượng, chủ thể, hành động, bối cảnh, góc máy, ánh sáng và chuyển động.

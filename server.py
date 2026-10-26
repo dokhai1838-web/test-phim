@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent
 MAX_VIDEO = 100 * 1024 * 1024
+MAX_INSTRUCTIONS = 80000
 MIMES = {'video/mp4', 'video/webm', 'video/quicktime', 'video/mpeg'}
 TARGETS = {'Veo', 'Sora', 'Runway', 'Kling', 'Midjourney', 'Tổng quát'}
 PROCESSING_SLOT = threading.BoundedSemaphore(1)
@@ -70,8 +71,8 @@ def model_for(provider):
 
 
 def validate_instructions(value):
-    if not isinstance(value, str) or len(value) > 10000:
-        raise AppError('Hướng dẫn phải là văn bản và không quá 10.000 ký tự.')
+    if not isinstance(value, str) or len(value) > MAX_INSTRUCTIONS:
+        raise AppError('Hướng dẫn phải là văn bản và không quá 80.000 ký tự.')
     return value.strip()
 
 
@@ -96,8 +97,8 @@ def parse_video(data, content_type):
         data = fields['video'].get_payload(decode=True) or b''
         if 'instructions' in fields:
             raw = fields['instructions'].get_payload(decode=True) or b''
-            if len(raw) > 40000:
-                raise AppError('Hướng dẫn không được quá 10.000 ký tự.')
+            if len(raw) > MAX_INSTRUCTIONS * 4:
+                raise AppError('Hướng dẫn không được quá 80.000 ký tự.')
             try:
                 instructions = validate_instructions(raw.decode('utf-8'))
             except UnicodeDecodeError:
@@ -283,7 +284,9 @@ class Handler(BaseHTTPRequestHandler):
                 length = int(self.headers.get('Content-Length', '0'))
             except ValueError:
                 raise AppError('Độ dài yêu cầu không hợp lệ.') from None
-            limit = MAX_VIDEO + 65536 if path == '/api/analyze' else 400000
+            # UTF-8 uses up to 4 bytes per character; JSON escapes can use 12.
+            limit = (MAX_VIDEO + MAX_INSTRUCTIONS * 4 + 65536 if path == '/api/analyze'
+                     else (60000 + MAX_INSTRUCTIONS + 10000) * 12 + 65536)
             if length <= 0 or length > limit:
                 raise AppError('Tệp quá lớn (tối đa 100 MB) hoặc yêu cầu trống.', 413)
             mime = self.headers.get('Content-Type', '').split(';')[0]

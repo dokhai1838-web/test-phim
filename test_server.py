@@ -98,13 +98,15 @@ class IntegrationTests(unittest.TestCase):
     @patch('server.key_for', return_value='test-key')
     @patch('server.api')
     def test_custom_gemini_workflow_reaches_provider(self, api, _):
-        workflow = 'Chỉ phân tích âm thanh, ghi lời thoại theo mốc thời gian.'
+        # 80k Vietnamese characters exceed the old multipart byte allowance.
+        workflow = 'ế' * 80000
         api.side_effect = [
             ({}, {'X-Goog-Upload-URL': 'https://generativelanguage.googleapis.com/upload/session'}),
             ({'file': {'name': 'files/abc', 'state': 'ACTIVE', 'uri': 'https://generativelanguage.googleapis.com/v1beta/files/abc'}}, {}),
             ({'candidates': [{'content': {'parts': [{'text': 'Audio analysis'}]}}]}, {}), ({}, {})]
         payload, mime = self.multipart(workflow)
-        status, result = self.post('/api/analyze', payload, mime)
+        with patch('server.MAX_VIDEO', len(b'fake-video-fixture')):
+            status, result = self.post('/api/analyze', payload, mime)
         self.assertEqual(status, 200)
         self.assertEqual(result['text'], 'Audio analysis')
         generated = api.call_args_list[2].kwargs['data']
@@ -114,10 +116,10 @@ class IntegrationTests(unittest.TestCase):
 
     @patch('server.api')
     def test_instruction_limits_rejected_before_provider_calls(self, api):
-        for value in ['x' * 10001, 123, ['invalid']]:
+        for value in ['x' * 80001, 123, ['invalid']]:
             body = json.dumps({'brief': 'A brief', 'instructions': value}).encode()
             self.assertEqual(self.post('/api/rewrite', body)[0], 400)
-        payload, mime = self.multipart('x' * 10001)
+        payload, mime = self.multipart('x' * 80001)
         self.assertEqual(self.post('/api/analyze', payload, mime)[0], 400)
         api.assert_not_called()
 
@@ -130,7 +132,8 @@ class IntegrationTests(unittest.TestCase):
     @patch('server.api')
     def test_custom_rewrite_instructions_are_separate_from_brief(self, api, _):
         api.return_value = ({'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': 'New prompt'}]}]}, {})
-        custom = 'Chỉ xuất một prompt 100 từ, không giải thích.'
+        # JSON escapes make this body larger than the old 400k byte limit.
+        custom = 'ế' * 80000
         body = {'brief': 'Original reference', 'instructions': custom}
         self.assertEqual(self.post('/api/rewrite', json.dumps(body).encode())[0], 200)
         data = json.loads(api.call_args.kwargs['data']['input'])
