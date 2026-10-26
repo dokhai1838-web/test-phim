@@ -211,6 +211,90 @@ class IntegrationTests(unittest.TestCase):
         self.assertNotIn('secret-provider-payload', str(caught.exception))
         self.assertEqual(caught.exception.status, 502)
 
+    @patch('server.key_for', return_value='test-key')
+    @patch('server.api')
+    def test_openai_missing_model_recovers_and_reports_actual_model(self, api, _):
+        api.side_effect = [server.ProviderError('OpenAI: unavailable model', True),
+            ({'data': [{'id': 'gpt-4.1-mini'}, {'id': 'whisper-1'}]}, {}),
+            ({'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': 'Recovered prompt'}]}]}, {})]
+        with patch.dict(server.os.environ, {'OPENAI_MODEL': 'gpt-retired'}):
+            status, result = self.post('/api/rewrite', b'{"brief":"Coffee"}')
+        self.assertEqual(status, 200)
+        self.assertEqual(result['model'], 'gpt-4.1-mini')
+        self.assertEqual(result['configured_model'], 'gpt-retired')
+        self.assertEqual(api.call_args_list[1].kwargs['method'], 'GET')
+        self.assertEqual(api.call_args_list[2].kwargs['data']['model'], 'gpt-4.1-mini')
+
+
+class ModelRecoveryTests(unittest.TestCase):
+    @patch('server.api')
+    def test_gemini_recovery_excludes_specialist_models_and_reuses_payload(self, api):
+        payload = {'contents': [{'parts': [{'text': 'Analyze video'}, {'file_data': {'file_uri': 'video-uri'}}]}]}
+        api.side_effect = [server.ProviderError('Gemini: unavailable model', True),
+            ({'models': [
+                {'name': 'models/gemini-3-flash-preview', 'supportedGenerationMethods': ['generateContent']},
+                {'name': 'models/gemini-3-flash-image', 'supportedGenerationMethods': ['generateContent']},
+                {'name': 'models/gemini-3-flash-tts', 'supportedGenerationMethods': ['generateContent']},
+                {'name': 'models/gemini-9-flash', 'supportedGenerationMethods': ['embedContent']},
+            ]}, {}), ({'candidates': []}, {})]
+        with patch.dict(server.os.environ, {'GEMINI_MODEL': 'gemini-retired'}):
+            _, actual = server.generate('gemini', payload, {'x-goog-api-key': 'test-key'})
+        self.assertEqual(actual, 'gemini-3-flash-preview')
+        self.assertEqual(api.call_count, 3)
+        self.assertIs(api.call_args.kwargs['data'], payload)
+        self.assertIn('gemini-3-flash-preview:generateContent', api.call_args.args[0])
+
+    def test_error_classification_redacts_provider_message(self):
+        for url, detail, expected, label in [
+            ('https://generativelanguage.googleapis.com/v1beta/models/old:generateContent',
+             {'status': 'NOT_FOUND', 'message': 'models/old is not found; private-value'}, True, 'Gemini'),
+            ('https://api.openai.com/v1/responses',
+             {'code': 'model_not_found', 'message': 'private-value'}, True, 'OpenAI'),
+            ('https://generativelanguage.googleapis.com/v1beta/files/missing',
+             {'status': 'NOT_FOUND', 'message': 'File missing; private-value'}, False, 'Gemini'),
+            ('https://generativelanguage.googleapis.com/v1beta/models/current:generateContent',
+             {'status': 'NOT_FOUND', 'message': 'File not found; private-value'}, False, 'Gemini'),
+        ]:
+            with self.subTest(url=url):
+                error = urllib.error.HTTPError(url, 404, 'error', {}, io.BytesIO(json.dumps({'error': detail}).encode()))
+                with patch('urllib.request.urlopen', side_effect=error):
+                    with self.assertRaises(server.ProviderError) as caught:
+                        server.api(url, data={})
+                self.assertEqual(caught.exception.model_unavailable, expected)
+                self.assertIn(label, str(caught.exception))
+                self.assertNotIn('private-value', str(caught.exception))
+
+    @patch('server.api')
+    def test_other_errors_do_not_trigger_retry_or_catalog_request(self, api):
+        for error in [server.ProviderError('Gemini: file not found'),
+                      server.ProviderError('OpenAI: quota exhausted'), server.AppError('Timeout', 502)]:
+            api.reset_mock()
+            api.side_effect = error
+            with self.assertRaises(server.AppError):
+                server.generate('gemini', {}, {})
+            self.assertEqual(api.call_count, 1)
+
+    @patch('server.api')
+    def test_empty_catalog_reports_action_without_repeated_generation(self, api):
+        api.side_effect = [server.ProviderError('OpenAI: check OPENAI_MODEL in Render', True), ({'data': []}, {})]
+        with self.assertRaises(server.ProviderError) as caught:
+            server.generate('openai', {}, {})
+        self.assertIn('OPENAI_MODEL', str(caught.exception))
+        self.assertEqual(api.call_count, 2)
+
+    def test_gemini_accepts_catalog_model_prefix_and_surrounding_spaces(self):
+        with patch.dict(server.os.environ, {'GEMINI_MODEL': ' models/gemini-2.5-flash '}):
+            self.assertEqual(server.model_for('gemini'), 'gemini-2.5-flash')
+
+    @patch('server.api')
+    def test_retry_is_limited_to_one_alternative(self, api):
+        api.side_effect = [server.ProviderError('OpenAI unavailable', True),
+            ({'data': [{'id': 'gpt-4.1-mini'}, {'id': 'gpt-4o-mini'}]}, {}),
+            server.ProviderError('OpenAI alternative unavailable', True)]
+        with self.assertRaises(server.ProviderError):
+            server.generate('openai', {}, {})
+        self.assertEqual(api.call_count, 3)
+
 
 if __name__ == '__main__':
     unittest.main()

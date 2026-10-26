@@ -145,7 +145,8 @@ $('analyze').addEventListener('click', () => run('analyze', 'Gemini đang phân 
   form.append('instructions', $('gemini-instructions').value);
   const data = await request('/api/analyze', {method: 'POST', body: form});
   $('brief').value = data.text; sampleBrief = false; $('brief-label').textContent = 'GEMINI · CÓ THỂ CHỈNH SỬA'; invalidateOutput();
-  notice('Đã phân tích xong. Kiểm tra bản sơ lược, thêm định hướng và tạo prompt.');
+  const modelNote = data.model && data.model !== data.configured_model ? ` Mô hình cũ không khả dụng; đã dùng ${data.model}.` : '';
+  notice('Đã phân tích xong. Kiểm tra bản sơ lược, thêm định hướng và tạo prompt.' + modelNote);
   busy = false; showStep(2, true);
 }));
 $('rewrite').addEventListener('click', () => run('rewrite', 'ChatGPT đang viết prompt…', async () => {
@@ -154,7 +155,9 @@ $('rewrite').addEventListener('click', () => run('rewrite', 'ChatGPT đang viế
   const data = await request('/api/rewrite', {method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({brief: $('brief').value, context: $('context').value, target: $('target').value, language: $('language').value,
       instructions: $('chatgpt-instructions').value})});
-  showOutput(data.text); notice('Prompt đã sẵn sàng. Kiểm tra và điều chỉnh thông số theo phiên bản mô hình đích.');
+  showOutput(data.text);
+  const modelNote = data.model && data.model !== data.configured_model ? ` Mô hình cũ không khả dụng; đã dùng ${data.model}.` : '';
+  notice('Prompt đã sẵn sàng. Kiểm tra và điều chỉnh thông số theo phiên bản mô hình đích.' + modelNote);
   busy = false; showStep(3, true);
 }));
 $('demo').addEventListener('click', () => {
