@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: frameflow-studio
+    runtime: python
+    plan: free
+    buildCommand: python -m unittest -q
+    startCommand: python server.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.12
+      - key: HOST
+        value: 0.0.0.0
+      - key: APP_USERNAME
+        value: admin
+      - key: APP_PASSWORD
+        generateValue: true
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: OPENAI_MODEL
+        value: gpt-4.1
